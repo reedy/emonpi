@@ -21,7 +21,11 @@ import paho.mqtt.client as mqtt
 from gpiozero import Button
 
 # Local files
-import lcddriver
+
+import board
+from PIL import Image, ImageDraw, ImageFont
+import adafruit_ssd1306
+
 import gsmhuaweistatus
 
 path = os.path.dirname(os.path.realpath(__file__))
@@ -84,7 +88,7 @@ hilink_device_ip = config.get('huawei', 'hilink_device_ip')
 # I2C LCD: each I2C address will be tried in consecutive order until LCD is found
 # The first address that matches a device on the I2C bus will be used for the I2C LCD
 # ------------------------------------------------------------------------------------
-lcd_i2c = ['27', '3f']
+lcd_i2c = ['3c']
 # ------------------------------------------------------------------------------------
 
 # Default Startup Page
@@ -109,7 +113,29 @@ ssh_disable = "sudo systemctl disable ssh > /dev/null"
 ssh_stop = "sudo systemctl stop ssh > /dev/null"
 ssh_status = "sudo systemctl status ssh > /dev/null"
 
+oled_last = True
+
+def drawText(x,y,msg,update=False):
+    global draw
+    global oled
+    global font
+    global image
+    global oled_last
+    
+    if oled_last:
+        draw.rectangle((0, 0, 128, 32), outline=0, fill=0)
+        oled_last = False
+    
+    draw.text((x,y), msg, font=font, fill=255)
+    
+    if update:
+        oled.image(image)
+        oled.show()
+        oled_last = True
+
+
 def buttonPressLong():
+    print("Long press")
     logger.info("Mode button LONG press")
 
     if sshConfirm:
@@ -119,35 +145,33 @@ def buttonPressLong():
             subprocess.call(ssh_enable, shell=True)
             subprocess.call(ssh_start, shell=True)
             logger.info("SSH Enabled")
-            lcd[0] = 'SSH Enabled'
-            lcd[1] = 'Change password!'
+            drawText(0,0,'SSH Enabled')
+            drawText(0,14,'Change password!',True)
         else:
             #disable ssh
             subprocess.call(ssh_disable, shell=True)
             subprocess.call(ssh_stop, shell=True)
             logger.info("SSH Disabled")
-            lcd[0] = 'SSH Disabled'
-            lcd[1] = ''
+            drawText(0,0,'SSH Disabled')
+            drawText(0,14,'',True)
 
     elif shutConfirm:
         logger.info("Shutting down")
         shutdown()
-    else:
-        lcd.backlight = not lcd.backlight
 
 
 def buttonPress():
     global page
+    
+    print("button press")
 
     now = time.time()
 
-    if lcd.backlight:
-        page += 1
+    page += 1
     if page > max_number_pages:
         page = 0
     buttonPress_time = now
-    if not lcd.backlight:
-        lcd.backlight = 1
+    
     logger.info("Mode button SHORT press")
     logger.info("Page: " + str(page))
     updateLCD()
@@ -179,13 +203,13 @@ def updateLCD():
         r.set("wlan:active", int(bool(wlan0ip)))
 
         if eval(r.get("eth:active")):
-            lcd[0] = "Ethernet: YES"
-            lcd[1] = r.get("eth:ip")
+            drawText(0,0,"Ethernet: YES")
+            drawText(0,14,r.get("eth:ip"),True)
         elif eval(r.get("wlan:active")) or eval(r.get("gsm:active")):
             page += 1
         else:
-            lcd[0] = "Ethernet:"
-            lcd[1] = "NOT CONNECTED"
+            drawText(0,0,"Ethernet:")
+            drawText(0,14,"NOT CONNECTED",True)
 
     if page == 1:
     # Update wifi
@@ -207,19 +231,21 @@ def updateLCD():
 
         if eval(r.get("wlan:active")):
             if int(r.get("wlan:signallevel")) > 0:
-                lcd[0] = "WiFi: YES  " + r.get("wlan:signallevel") + "%"
+                drawText(0,0,"WiFi: YES  "+r.get("wlan:signallevel")+"%")
             else:
                 if r.get("wlan:ip") == "192.168.42.1":
-                    lcd[0] = "WiFi: AP MODE"
+                    drawText(0,0,"WiFi: AP MODE")
                 else:
-                    lcd[0] = "WiFi: YES"
+                    drawText(0,0,"WiFi: YES")
 
-            lcd[1] = r.get("wlan:ip")
+            drawText(0,14,r.get("wlan:ip"),True)
         elif eval(r.get("gsm:active")) or eval(r.get("eth:active")):
             page += 1
         else:
-            lcd[0] = "WiFi:"
-            lcd[1] = "NOT CONNECTED"
+            drawText(0,0,"WiFi:")
+            drawText(0,14,"NOT CONNECTED",True)
+        oled.image(image)
+        oled.show() 
 
     if page == 2:
     # Update Hi-Link 3G Dongle - connects on eth1
@@ -232,24 +258,24 @@ def updateLCD():
             r.set("gsm:active", 0)
 
         if eval(r.get("gsm:active")):
-            lcd[0] = r.get("gsm:connection")
-            lcd[1] = r.get("gsm:signal")
+            drawText(0,0,r.get("gsm:connection"))
+            drawText(0,14,r.get("gsm:signal"),True)
         elif eval(r.get("eth:active")) or eval(r.get("wlan:active")):
             page += 1
         else:
-            lcd[0] = "GSM:"
-            lcd[1] = "NO DEVICE"
+            drawText(0,0,"GSM:")
+            drawText(0,14,"NO DEVICE",True)
 
     if page == 3:
         if r.get("feed1") is not None:
-            lcd[0] = feed1_name + ':'  + r.get("feed1") + feed1_unit
+            drawText(0,0,feed1_name + ':'  + r.get("feed1") + feed1_unit)
         else:
-            lcd[0] = feed1_name + ':'  + "---"
+            drawText(0,0,feed1_name + ':'  + "---")
 
         if r.get("feed2") is not None:
-            lcd[1] = feed2_name + ':'  + r.get("feed2") + feed2_unit
+            drawText(0,14,feed2_name + ':'  + r.get("feed2") + feed2_unit,True)
         else:
-            lcd[1] = feed2_name + ':'  + "---"
+            drawText(0,14,feed2_name + ':'  + "---",True)
 
     elif page == 4:
         basedata = r.get("basedata")
@@ -257,14 +283,14 @@ def updateLCD():
         pulse = r.get("pulse")
         if basedata is not None:
             basedata = basedata.split(",")
-            lcd[0] = 'VRMS: ' + basedata[3] + "V"
-            lcd[1] = 'Pulse: ' + basedata[10] + "p"
+            drawText(0,0,'VRMS: ' + basedata[3] + "V")
+            drawText(0,14,'Pulse: ' + basedata[10] + "p",True)
         elif vrms is not None and pulse is not None:
-            lcd[0] = 'VRMS: ' + vrms + 'V'
-            lcd[1] = 'Pulse: ' + pulse + 'p'
+            drawText(0,0,'VRMS: ' + vrms + 'V')
+            drawText(0,14,'Pulse: ' + pulse + 'p',True)
         else:
-            lcd[0] = 'Connecting...'
-            lcd[1] = 'Please Wait'
+            drawText(0,0,'Connecting...')
+            drawText(0,14,'Please Wait',True)
             page += 1
 
     elif page == 5:
@@ -273,14 +299,14 @@ def updateLCD():
         temp2 = r.get('temp2')
         if basedata is not None:
             basedata = basedata.split(",")
-            lcd[0] = 'Temp 1: ' + basedata[4] + "\0C"
-            lcd[1] = 'Temp 2: ' + basedata[5] + "\0C"
+            drawText(0,0,'Temp 1: ' + basedata[4] + "\0C")
+            drawText(0,14,'Temp 2: ' + basedata[5] + "\0C",True)
         elif temp1 is not None and temp2 is not None:
-            lcd[0] = 'Temp 1: ' + temp1 + '\0C'
-            lcd[1] = 'Temp 2: ' + temp2 + '\0C'
+            drawText(0,0,'Temp 1: ' + temp1 + '\0C')
+            drawText(0,14,'Temp 2: ' + temp2 + '\0C',True)
         else:
-            lcd[0] = 'Connecting...'
-            lcd[1] = 'Please Wait'
+            drawText(0,0,'Connecting...')
+            drawText(0,14,'Please Wait',True)
             page += 1
 
     elif page == 6:
@@ -289,34 +315,34 @@ def updateLCD():
             seconds = float(f.readline().split()[0])
         r.set('uptime', seconds)
 
-        lcd[0] = datetime.now().strftime('%b %d %H:%M')
-        lcd[1] = 'Uptime %.2f days' % (seconds / 86400)
+        drawText(0,0,datetime.now().strftime('%b %d %H:%M'))
+        drawText(0,14,'Uptime %.2f days' % (seconds / 86400),True)
 
     elif page == 7:
-        lcd[0] = sd_image_version
-        lcd[1] = "Serial: " + serial_num
+        drawText(0,0,sd_image_version)
+        drawText(0,14,"Serial: " + serial_num,True)
 
     elif page == 8:
         ret = subprocess.call(ssh_status, shell=True)
         if ret > 0:
             #ssh not running
-            lcd[0] = "SSH Enable?"
+            drawText(0,0,"SSH Enable?")
         else:
             #ssh not running
-            lcd[0] = "SSH Disable?"
+            drawText(0,0,"SSH Disable?")
 
-        lcd[1] = "Y press & hold"
+        drawText(0,14,"Y press & hold",True)
         sshConfirm = False
 
     elif page == 9:
         sshConfirm = True
 
     elif page == 10:
-        lcd[0] = "Shutdown?"
-        lcd[1] = "Y press & hold"
+        drawText(0,0,"Shutdown?")
+        drawText(0,14,"Y press & hold",True)
         shutConfirm = False
     elif page == 11:
-        lcd[0] = "Shutdown?"
+        drawText(0,0,"Shutdown?",True)
         shutConfirm = True
 
 
@@ -335,19 +361,18 @@ class IPAddress:
             return ''
 
 def preShutdown():
-    lcd[0] = "Shutdown?"
-    lcd[1] = "Hold 5 secs"
+    drawText(0,0,"Shutdown?")
+    drawText(0,14,"Hold 5 secs",True)
 
 def shutdown():
-    lcd.backlight = 1
-    lcd[0] = "emonPi Shutdown"
-    lcd[1] = "SHUTDOWN NOW!"
+    drawText(0,0,"emonPi Shutdown")
+    drawText(0,14,"SHUTDOWN NOW!",True)
     time.sleep(2)
-    lcd[0] = "Wait 30s..."
-    lcd[1] = "Before Unplug!"
+    drawText(0,0,"Wait 30s...")
+    drawText(0,14,"Before Unplug!",True)
     time.sleep(4)
     # backlight zero must be the last call to the LCD to keep the backlight off
-    lcd.backlight = 0
+
     subprocess.call(['sudo','halt'], shell=False)
     sys.exit(0)  # end script
 
@@ -356,6 +381,11 @@ def main():
     global page
     global sd_image_version
     global serial_num
+    
+    global draw
+    global oled
+    global font
+    global image
 
     # Initialise some redis variables
     r.set("gsm:active", 0)
@@ -387,8 +417,8 @@ def main():
     global lcd
     for i2c_address in lcd_i2c:
         try:
-            lcd = lcddriver.lcd(int(i2c_address, 16))
-            lcd.backlight = 1
+            i2c = board.I2C()
+            oled = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c, addr=0x3C, reset=None)
         except OSError:
             # No LCD at this address, try the next...
             continue
@@ -404,9 +434,13 @@ def main():
         r.set("describe", "emonbase")
         sys.exit(0)
 
-    # This is a row-major bitmap of a character.
-    degree_sign = [ 6, 9, 9, 6, 0, 0, 0, 0 ]
-    lcd.lcd_create_char(0, degree_sign)
+
+    oled.fill(0)
+    oled.show()
+    image = Image.new("1", (oled.width, oled.height))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
+
 
     # Read RaspberryPi serial number
     pi_serial = False
@@ -446,9 +480,10 @@ def main():
             break
     else:
         sd_image_version = 'N/A'
-
-    lcd[0] = sd_image_version
-    lcd[1] = "Serial: " + serial_num
+    
+    drawText(0,0,sd_image_version)
+    drawText(0,14,"Serial: " + serial_num,True)
+    
     logger.info("SD card image build version: %s", sd_image_version)
     time.sleep(5)
 
@@ -460,19 +495,11 @@ def main():
     # No bounce time increases response time but may result in switch bouncing...
     logger.info("Attaching push button interrupt...")
     try:
-        push_btn = Button(23, pull_up=False, hold_time=5)
+        push_btn = Button(17, pull_up=False, hold_time=5)
         push_btn.when_pressed = buttonPress
         push_btn.when_held = buttonPressLong
     except Exception:
         logger.error("Failed to attach LCD push button interrupt...")
-
-    logger.info("Attaching shutdown button interrupt...")
-    try:
-        shut_btn = Button(17, pull_up=False, hold_time=5)
-        shut_btn.when_pressed = preShutdown
-        shut_btn.when_held = shutdown
-    except Exception:
-        logger.error("Failed to attach shutdown button interrupt...")
 
     logger.info("Connecting to redis server...")
     # We wait here until redis has successfully started up
@@ -516,17 +543,11 @@ def main():
 
     buttonPress_time = time.time()
 
-    if not backlight_timeout:
-        lcd.backlight = 1
-
     page = default_page
 
     # Enter main loop
     while True:
-        # turn backlight off after backlight_timeout seconds
         now = time.time()
-        if backlight_timeout and now - buttonPress_time > backlight_timeout and lcd.backlight:
-            lcd.backlight = 0
 
         #Update LCD in case it is left at a screen where values can change (e.g uptime etc)
         updateLCD()
