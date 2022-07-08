@@ -135,7 +135,6 @@ def drawText(x,y,msg,update=False):
 
 
 def buttonPressLong():
-    print("Long press")
     logger.info("Mode button LONG press")
 
     if sshConfirm:
@@ -162,9 +161,6 @@ def buttonPressLong():
 
 def buttonPress():
     global page
-    
-    print("button press")
-
     now = time.time()
 
     page += 1
@@ -485,7 +481,7 @@ def main():
     drawText(0,14,"Serial: " + serial_num,True)
     
     logger.info("SD card image build version: %s", sd_image_version)
-    time.sleep(5)
+    time.sleep(1)
 
     # Set up the buttons and install handlers
 
@@ -495,7 +491,7 @@ def main():
     # No bounce time increases response time but may result in switch bouncing...
     logger.info("Attaching push button interrupt...")
     try:
-        push_btn = Button(17, pull_up=False, hold_time=5)
+        push_btn = Button(17, pull_up=True, bounce_time=0.1, hold_time=5)
         push_btn.when_pressed = buttonPress
         push_btn.when_held = buttonPressLong
     except Exception:
@@ -539,7 +535,7 @@ def main():
         logger.info("Connected to MQTT")
 
     # time to show Build version
-    time.sleep(2)
+    # time.sleep(2)
 
     buttonPress_time = time.time()
 
