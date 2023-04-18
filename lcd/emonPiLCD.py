@@ -44,8 +44,7 @@ mqtt_user = config.get('mqtt', 'mqtt_user')
 mqtt_passwd = config.get('mqtt', 'mqtt_passwd')
 mqtt_host = config.get('mqtt', 'mqtt_host')
 mqtt_port = config.getint('mqtt', 'mqtt_port')
-mqtt_topics = {config.get('mqtt', 'mqtt_emonpi_topic'): 'basedata',
-               config.get('mqtt', 'mqtt_temp1_topic'): 'temp1',
+mqtt_topics = {config.get('mqtt', 'mqtt_temp1_topic'): 'temp1',
                config.get('mqtt', 'mqtt_temp2_topic'): 'temp2',
                config.get('mqtt', 'mqtt_feed1_topic'): 'feed1',
                config.get('mqtt', 'mqtt_feed2_topic'): 'feed2',
@@ -103,7 +102,7 @@ shutConfirm = False
 # ------------------------------------------------------------------------------------
 # Start Logging
 # ------------------------------------------------------------------------------------
-uselogfile = config.getboolean('general', 'uselogfile')
+uselogfile = config.get('general', 'uselogfile')
 logger = logging.getLogger("emonPiLCD")
 
 #ssh enable/disable/check commands
@@ -274,14 +273,9 @@ def updateLCD():
             drawText(0,14,feed2_name + ':'  + "---",True)
 
     elif page == 4:
-        basedata = r.get("basedata")
         vrms = r.get("vrms")
         pulse = r.get("pulse")
-        if basedata is not None:
-            basedata = basedata.split(",")
-            drawText(0,0,'VRMS: ' + basedata[3] + "V")
-            drawText(0,14,'Pulse: ' + basedata[10] + "p",True)
-        elif vrms is not None and pulse is not None:
+        if vrms is not None and pulse is not None:
             drawText(0,0,'VRMS: ' + vrms + 'V')
             drawText(0,14,'Pulse: ' + pulse + 'p',True)
         else:
@@ -290,16 +284,11 @@ def updateLCD():
             page += 1
 
     elif page == 5:
-        basedata = r.get("basedata")
         temp1 = r.get('temp1')
         temp2 = r.get('temp2')
-        if basedata is not None:
-            basedata = basedata.split(",")
-            drawText(0,0,'Temp 1: ' + basedata[4] + "\0C")
-            drawText(0,14,'Temp 2: ' + basedata[5] + "\0C",True)
-        elif temp1 is not None and temp2 is not None:
-            drawText(0,0,'Temp 1: ' + temp1 + '\0C')
-            drawText(0,14,'Temp 2: ' + temp2 + '\0C',True)
+        if temp1 is not None and temp2 is not None:
+            drawText(0,0,'Temp 1: ' + temp1 + 'C')
+            drawText(0,14,'Temp 2: ' + temp2 + 'C',True)
         else:
             drawText(0,0,'Connecting...')
             drawText(0,14,'Please Wait',True)
@@ -491,7 +480,7 @@ def main():
     # No bounce time increases response time but may result in switch bouncing...
     logger.info("Attaching push button interrupt...")
     try:
-        push_btn = Button(17, pull_up=True, bounce_time=0.1, hold_time=5)
+        push_btn = Button(4, pull_up=True, bounce_time=0.1, hold_time=5)
         push_btn.when_pressed = buttonPress
         push_btn.when_held = buttonPressLong
     except Exception:
